@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="x-dns-prefetch-control" content="off">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-9zy/LsPDy7jOS1MTIQvd/4v1WUKKnKsymxoqiMfopmU='; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<title>智能体控制台 · 悬浮空间</title><meta name="description" content="产品助手、AI助手、设计助手的公开工作空间和飞书配置入口。"><link rel="icon" href="data:,">
+<script>(function () {
+  const key = 'assistant-space-public-theme';
+  const root = document.documentElement;
+  const os = window.matchMedia('(prefers-color-scheme: dark)');
+  let saved;
+  try { saved = localStorage.getItem(key); } catch (_) {}
+  const valid = value => value === 'light' || value === 'dark';
+  function paint() {
+    const theme = valid(saved) ? saved : (os.matches ? 'dark' : 'light');
+    root.dataset.theme = theme;
+    const button = document.getElementById('theme');
+    if (!button) return;
+    const label = theme === 'dark' ? '切换到浅色模式' : '切换到深色模式';
+    button.title = label; button.setAttribute('aria-label', label);
+    document.getElementById('theme-word').textContent = theme === 'dark' ? '浅色' : '深色';
+    button.hidden = false;
+  }
+  paint();
+  document.addEventListener('DOMContentLoaded', () => {
+    paint();
+    document.getElementById('theme').addEventListener('click', () => {
+      saved = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem(key, saved); } catch (_) {}
+      paint();
+    });
+  });
+  os.addEventListener('change', paint);
+  window.addEventListener('storage', e => { if (e.key === key || e.key === null) { saved = e.newValue; paint(); } });
+})();
+document.addEventListener('DOMContentLoaded', function () {
+  const keys = ['product','ai','design'];
+  const models = new Set(['6.1 Sol','6 Sol','6 Astra','6.2 Sol','6.2 Astra']);
+  const efforts = new Set(['none','minimal','low','medium','high','xhigh','max','ultra']);
+  const text = (id, value) => { document.getElementById(id).textContent = value; };
+  const exact = (obj, names) => obj && typeof obj === 'object' && !Array.isArray(obj) &&
+    Object.keys(obj).length === names.length && names.every(k => Object.hasOwn(obj,k));
+  const optional = (value, allowed) => value === null || allowed.has(value);
+  const clock = new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+  let report = null, busy = false;
+  function valid(data) {
+    if (!exact(data,['version','reportedAt','agents']) || data.version !== 1 ||
+        typeof data.reportedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(data.reportedAt)) return false;
+    const stamp = Date.parse(data.reportedAt);
+    if (!Number.isFinite(stamp) || stamp > Date.now()+5*60000 || !Array.isArray(data.agents) || data.agents.length!==3) return false;
+    const seen = new Set();
+    for (const row of data.agents) {
+      if (!exact(row,['key','model','effort']) || !keys.includes(row.key) || seen.has(row.key) || !optional(row.model,models) || !optional(row.effort,efforts)) return false;
+      seen.add(row.key);
+    }
+    return true;
+  }
+  function show() {
+    const tag = document.getElementById('report-tag'), time = document.getElementById('stamp');
+    for (const key of keys) {
+      const row = report && report.agents.find(it => it.key === key);
+      text(key+'-model',row && row.model || '未报告');
+      text(key+'-effort',row && row.effort || '未报告');
+    }
+    if (!report) { tag.dataset.state='missing';tag.textContent='暂无可核实的报告';time.hidden=true;time.removeAttribute('datetime');time.textContent='';return; }
+    const stamp=Date.parse(report.reportedAt), stale=(Date.now()-stamp >= 7*3600000);
+    tag.dataset.state=stale?'stale':'reported';tag.textContent=stale?'报告已过期（超过 7 小时）':'最近一次报告';
+    time.dateTime=report.reportedAt;time.textContent=clock.format(stamp)+'（北京时间）';time.hidden=false;
+  }
+  async function load() {
+    if (busy || document.visibilityState==='hidden' || !['https:','http:'].includes(location.protocol)) return;
+    busy=true;const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),7000);
+    try {
+      const r=await fetch('./bridge-status.json',{mode:'same-origin',credentials:'omit',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer',signal:ctl.signal});
+      if (!r.ok || Number(r.headers.get('content-length')||0)>8192) throw new Error();
+      const body=await r.text();if (body.length>8192) throw new Error();
+      const next=JSON.parse(body);if (!valid(next)) throw new Error();report=next;
+    } catch (_) { report=null; } finally { clearTimeout(timer);busy=false;show(); }
+  }
+  load();setInterval(load,120000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){show();load();}});
+});</script>
+<style>:root{color-scheme:light;--bg:#edf4f6;--wall:linear-gradient(117deg,#f8fbfc 0%,#e6f1f4 42%,#f9f8f4 88%);--ink:#1b303d;--muted:#4d6472;--sub:#526a77;--line:rgba(42,70,84,.18);--glass:linear-gradient(141deg,rgba(255,255,255,.92),rgba(255,255,255,.46));--edge:rgba(255,255,255,.95);--shade:rgba(38,71,84,.09);--quiet:rgba(255,255,255,.38);--main:#245c63;--on-main:#fff;--focus:#007269;--mint:#106e59;--mintbg:#d4ebe2;--blue:#265d92;--bluebg:#dbe7f5;--gold:#89561a;--goldbg:#f4e7d1;--label-bg:rgba(255,255,255,.64);--brand:#285d5d;--brand-bg:#d0e8e1}
+:root[data-theme=dark]{color-scheme:dark;--bg:#10191f;--wall:linear-gradient(117deg,#151d27 0%,#14252b 48%,#252522 100%);--ink:#eff5f7;--muted:#b2c2ca;--sub:#b3c1c9;--line:rgba(220,236,242,.18);--glass:linear-gradient(144deg,rgba(53,69,79,.77),rgba(33,46,53,.66));--edge:rgba(225,241,245,.21);--shade:rgba(2,7,12,.25);--quiet:rgba(220,239,241,.045);--main:#a6ddd0;--on-main:#173532;--focus:#91d9c7;--mint:#a3ddca;--mintbg:#294d44;--blue:#b6d7fc;--bluebg:#334759;--gold:#efd09b;--goldbg:#514637;--label-bg:rgba(189,218,228,.08);--brand:#bbebdf;--brand-bg:#28443e}
+*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;min-height:100vh;background:var(--wall) fixed;color:var(--ink);font:15px/1.6 'Segoe UI','PingFang SC','Microsoft YaHei',system-ui,sans-serif;letter-spacing:0;-webkit-font-smoothing:antialiased}h1,h2,h3,p,dl,dd,ul{margin:0}a{color:inherit;text-decoration:none}button{font:inherit;color:inherit}button,a,summary{-webkit-tap-highlight-color:transparent}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--focus);outline-offset:4px}button[hidden]{display:none!important}.icon{width:20px;height:20px;display:inline-block;flex:none}.wrap{width:min(100% - 64px,1088px);margin-inline:auto}.top{border-bottom:1px solid var(--line);background:var(--quiet)}.bar{min-height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px}.brand,.actions,.control,.tag,.agent-head,.section-head,.type-name,.summary-content,.local-link,.row-info{display:flex;align-items:center}.brand{gap:11px}.mark{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:var(--brand-bg);color:var(--brand);box-shadow:inset 0 1px 0 var(--edge)}.mark .icon{width:23px;height:23px}.brand b{font-size:16px;font-weight:650}.brand small{font-size:13px;color:var(--sub);border-left:1px solid var(--line);margin-left:3px;padding-left:14px}.control{gap:7px;min-height:44px;justify-content:center;border:1px solid var(--line);padding:0 15px;border-radius:12px;background:var(--quiet);font-weight:600;font-size:14px;line-height:1.4;cursor:pointer;white-space:nowrap;transition:background-color .17s,box-shadow .17s,transform .17s}.control .icon.end{width:14px;height:14px}.control.primary{background:var(--main);color:var(--on-main);border-color:transparent;box-shadow:0 4px 10px var(--shade)}.theme{min-width:79px;font-weight:500}.theme .icon{width:17px;height:17px}.sun{display:none}:root[data-theme=dark] .sun{display:block}:root[data-theme=dark] .moon{display:none}.intro{padding:42px 0 30px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;border-bottom:1px solid var(--line)}.intro-left{max-width:625px;min-width:0}.tag{gap:7px;color:var(--sub);font-size:13px}.tag .icon{width:15px;height:15px}.tag span+span{border-left:1px solid var(--line);padding-left:9px;margin-left:2px}h1{font-size:18px;font-weight:650;line-height:1.55;margin:9px 0 4px}.intro p,.section-head p,.agent-copy,.local-note{color:var(--muted);font-size:14px}.actions{gap:10px;flex-wrap:wrap}.section-head{align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}h2{font-size:18px;font-weight:650;line-height:1.5}.count{font-size:13px;color:var(--sub)}.agents-section,.models{padding-top:28px}.agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.agent{position:relative;min-width:0;padding:21px;border:1px solid var(--line);background:var(--glass);border-radius:19px;box-shadow:0 12px 29px var(--shade),inset 0 1px 0 var(--edge);backdrop-filter:blur(17px)}.agent-head{gap:13px}.agent-art{width:44px;height:44px;display:grid;place-items:center;flex:none;border-radius:14px;background:var(--artbg);color:var(--art);box-shadow:inset 0 1px 0 var(--edge)}.agent-art .icon{width:24px;height:24px}.product{--art:var(--blue);--artbg:var(--bluebg)}.ai{--art:var(--mint);--artbg:var(--mintbg)}.design{--art:var(--gold);--artbg:var(--goldbg)}.agent h3{font-size:18px;font-weight:650;line-height:1.45}.agent-copy{margin-top:2px}.agent dl{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 12px;border-top:1px solid var(--line);margin-top:19px;padding-top:12px;color:var(--sub);font-size:13px}.agent dd{display:inline-flex;align-items:center;gap:5px;font-weight:500;color:var(--muted)}.agent dd .icon{width:14px;height:14px}.models{margin-top:6px}.model-table{border-block:1px solid var(--line)}.model-row{display:grid;grid-template-columns:minmax(95px,25%) 1fr;align-items:center;min-height:57px;gap:8px 14px;padding:9px 4px}.model-row+.model-row{border-top:1px solid var(--line)}.type-name{gap:10px;font-size:15px;font-weight:650}.type-name::before{content:'';width:3px;height:16px;background:var(--blue);border-radius:3px}.model-row.astra .type-name::before{background:var(--gold)}.opts{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:6px 24px}.opts li{font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums}.admin{margin:29px 0 42px;border-block:1px solid var(--line);background:var(--quiet)}summary{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 13px;line-height:1.45;min-height:50px;cursor:pointer;list-style:none}summary::-webkit-details-marker{display:none}.summary-content{gap:9px;font-weight:600;font-size:15px}.summary-content .icon{color:var(--sub)}.arrow{width:17px!important;height:17px!important;transition:transform .18s}details[open] summary .arrow{transform:rotate(180deg)}.admin-body{padding:0 14px 14px 42px}.local-note{max-width:690px}.local-link{display:inline-flex;min-height:44px;max-width:100%;gap:7px;color:var(--main);font-weight:650;font-size:14px;text-decoration:underline;text-underline-offset:4px}.local-link .icon{width:15px;height:15px}.local-host{font-size:13px;color:var(--sub);overflow-wrap:anywhere;margin-left:10px}.skip{position:absolute;left:12px;top:-90px;z-index:2;padding:10px;color:var(--on-main);background:var(--main)}.skip:focus{top:8px}
+@media(hover:hover){.control:hover{box-shadow:0 4px 13px var(--shade);transform:translateY(-1px)}.local-link:hover{text-decoration-thickness:2px}summary:hover{background:var(--quiet)}}
+@media(max-width:900px){.intro{align-items:flex-start;flex-direction:column;gap:17px;padding:30px 0 24px}.agent{padding:16px}.agents{gap:10px}.agent-head{gap:8px}}
+@media(max-width:650px){.wrap{width:calc(100% - 32px)}.bar{min-height:60px}.brand{gap:8px}.brand small{display:none}.intro{padding:25px 0 20px}.intro p,.agent-copy,.local-note{font-size:16px}.intro h1{margin-top:7px}.actions{gap:8px}.actions .control{padding:0 11px}.agents{grid-template-columns:1fr;gap:9px}.agents-section,.models{padding-top:23px}.agent{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-radius:15px}.agent h3{font-size:17px}.agent-copy{font-size:14px}.agent dl{margin:0;border:0;padding:0;display:grid;gap:1px;text-align:right;flex:none}.agent dd{justify-content:flex-end}.agent-head{gap:10px}.agent-art{width:38px;height:38px;border-radius:11px}.agent-art .icon{width:21px;height:21px}.section-head{align-items:flex-start;margin-bottom:12px}.models .section-head{display:block}.models .section-head p{margin-top:3px}.model-row{grid-template-columns:62px minmax(0,1fr);min-height:53px;padding:9px 2px;column-gap:9px}.opts{gap:3px 13px}.opts li{font-size:14px}.admin{margin:24px 0 28px}.admin-body{padding-left:13px}.local-host{display:block;margin-left:0}}
+@media(max-width:360px){.wrap{width:calc(100% - 24px)}.theme{min-width:65px}.agent{padding:11px 10px}.agent-art{width:32px;height:32px}.agent-head{gap:7px}.agent dl{font-size:12px}.opts{gap:2px 11px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+.report-info{display:flex;align-items:center;gap:7px 12px;flex-wrap:wrap;margin:0 0 11px;font-size:13px;color:var(--sub);min-height:22px}.report-info time{font-variant-numeric:tabular-nums}.report-mark{font-weight:600}.report-mark[data-state=stale]{border-left:3px solid var(--gold);padding-left:7px;color:var(--gold)}.cards-note{color:var(--muted);font-size:14px;margin-top:12px}.agent dl{display:grid;grid-template-columns:1fr auto;gap:3px 10px}.agent dd{font-variant-numeric:tabular-nums;justify-content:flex-end}.agent dd:last-child{font-weight:500}.agent dt{text-align:left}.agent dd{color:var(--ink)}.agent dl dt,.agent dl dd{white-space:nowrap}.section-head .count{align-self:center}@media(max-width:650px){.agent dl{min-width:116px;row-gap:2px}.agent dt{font-size:12px}.agent dd{font-size:13px}.report-info{margin-top:-3px}.cards-note{font-size:14px}.section-head{margin-bottom:8px}}@media(max-width:350px){.agent{display:block}.agent dl{margin-top:9px;padding-top:7px;border-top:1px solid var(--line);grid-template-columns:1fr auto 1fr auto;column-gap:5px}.agent dt:nth-of-type(2){text-align:right}.agent-copy{font-size:14px}}
+body{background-attachment:scroll}.control.primary{transition:box-shadow .17s,transform .17s}
+</style>
+</head>
+<body><a class="skip" href="#main">跳到工作空间</a>
+<header class="top"><div class="bar wrap"><div class="brand"><span class="mark"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /> <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /> <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></svg></span><b>智能体控制台</b><small>悬浮空间</small></div><button class="control theme" id="theme" type="button" aria-label="切换外观" hidden><svg class="icon moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" /></svg><svg class="icon sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" /></svg><span id="theme-word">外观</span></button></div></header>
+<main class="wrap" id="main"><section class="intro" aria-labelledby="page-title"><div class="intro-left"><div class="tag"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v16" /> <path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z" /></svg><span>工作空间</span><span>公开只读</span></div><h1 id="page-title">把三个助手，放在同一片空间里。</h1><p>目标配置由飞书维护。查看和修改配置需要相应的飞书权限。</p></div><nav class="actions" aria-label="飞书配置入口"><a class="control primary" href="https://e0cmewvq7v7.feishu.cn/base/QKVFb8V7Wa23xlsJZq3c9hmanFd?table=tblVROFkWaRxr7x8" target="_blank" rel="external noopener noreferrer nofollow"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 9h18" /> <path d="M9 3v18" /> <rect x="3" y="3" width="18" height="18" rx="2" /></svg>打开配置表<svg class="icon end" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6" /> <path d="M10 14 21 3" /> <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg></a><a class="control " href="https://e0cmewvq7v7.feishu.cn/base/QKVFb8V7Wa23xlsJZq3c9hmanFd?table=blkVM8OEAT0oCP4c" target="_blank" rel="external noopener noreferrer nofollow"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 16v5" /> <path d="M16 14.639V21" /> <path d="M20 10.656V21" /> <path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15" /> <path d="M4 18.463V21" /> <path d="M8 14.656V21" /></svg>查看飞书看板<svg class="icon end" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6" /> <path d="M10 14 21 3" /> <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg></a></nav></section>
+<section class="agents-section" aria-labelledby="agents-title"><div class="section-head"><h2 id="agents-title">Bridge 上次配置</h2><span class="count">3 位助手</span></div><div class="report-info" aria-live="polite"><span class="report-mark" data-state="missing" id="report-tag">暂无可核实的报告</span><time id="stamp" hidden></time></div><div class="agents">
+<article class="agent product"><div class="agent-head"><span class="agent-art"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M3 9h18" /> <path d="M9 21V9" /></svg></span><div><h3>产品助手</h3><p class="agent-copy">产品策略与交付</p></div></div><dl><dt>模型</dt><dd id="product-model">未报告</dd><dt>推理强度</dt><dd id="product-effort">未报告</dd></dl></article>
+<article class="agent ai"><div class="agent-head"><span class="agent-art"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" /></svg></span><div><h3>AI助手</h3><p class="agent-copy">知识与日常协作</p></div></div><dl><dt>模型</dt><dd id="ai-model">未报告</dd><dt>推理强度</dt><dd id="ai-effort">未报告</dd></dl></article>
+<article class="agent design"><div class="agent-head"><span class="agent-art"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m18 13-.654-4.736a4 4 0 00-2.756-3.266l-9.163-2.9a2 2 0 00-2.017.493l-.82.819a2 2 0 00-.492 2.017l2.9 9.163a4 4 0 003.266 2.756L13 18" /> <path d="M18.648 12.352a1.205 1.205 0 011.704 0l1.296 1.296a1.205 1.205 0 010 1.704l-6.296 6.296a1.205 1.205 0 01-1.704 0l-1.296-1.296a1.205 1.205 0 010-1.704z" /> <path d="m3 3 6.586 6.586" /> <circle cx="11" cy="11" r="2" /></svg></span><div><h3>设计助手</h3><p class="agent-copy">视觉与体验设计</p></div></div><dl><dt>模型</dt><dd id="design-model">未报告</dd><dt>推理强度</dt><dd id="design-effort">未报告</dd></dl></article>
+</div><p class="cards-note">这里显示 Bridge 主机上报的配置。Bot 是否在线、实际回复使用哪个模型，均未核实。</p></section>
+<section class="models" aria-labelledby="models-title"><div class="section-head"><h2 id="models-title">可选模型</h2><p>配置目录 · 共 5 项</p></div><div class="model-table"><div class="model-row"><h3 class="type-name">Sol</h3><ul class="opts" aria-label="Sol 家族可选模型"><li>6.1 Sol</li><li>6 Sol</li><li>6.2 Sol</li></ul></div><div class="model-row astra"><h3 class="type-name">Astra</h3><ul class="opts" aria-label="Astra 家族可选模型"><li>6 Astra</li><li>6.2 Astra</li></ul></div></div></section>
+<details class="admin"><summary><span class="summary-content"><svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="20" height="14" x="2" y="3" rx="2" /> <line x1="8" x2="16" y1="21" y2="21" /> <line x1="12" x2="12" y1="17" y2="21" /></svg>管理员工具 · Bridge 主机</span><svg class="icon arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" /></svg></summary><div class="admin-body"><p class="local-note">仅在运行 Bridge 的电脑上使用。授权管理员可在本机控制台核对进程、应用配置和重启 Bot。</p><a class="local-link" href="http://127.0.0.1:18761/" target="_blank" rel="external noopener noreferrer nofollow">打开本机完整控制台 <svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6" /> <path d="M10 14 21 3" /> <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg></a><span class="local-host">本机地址：127.0.0.1:18761</span></div></details></main>
+<!-- Lucide icons; the following notices apply to the inline icon paths.
+ISC License
+
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+—-
+
+The following Lucide icons are derived from the Feather project:
+
+
+The MIT License (MIT) (for the icons listed above)
+
+Copyright (c) 2013-present Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-->
+</body></html>

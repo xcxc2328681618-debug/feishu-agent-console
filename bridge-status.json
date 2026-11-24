@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "reportedAt": "2026-11-24T01:26:50.702Z",
+  "agents": [
+    {
+      "key": "product",
+      "model": "6.2 Astra",
+      "effort": "ultra"
+    },
+    {
+      "key": "ai",
+      "model": "6.2 Astra",
+      "effort": "ultra"
+    },
+    {
+      "key": "design",
+      "model": "6.2 Astra",
+      "effort": "ultra"
+    }
+  ]
+}
